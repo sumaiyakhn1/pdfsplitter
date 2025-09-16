@@ -8,7 +8,7 @@ from io import BytesIO
 
 app = FastAPI()
 
-# Allow CORS
+# Allow CORS for frontend requests
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -17,7 +17,7 @@ app.add_middleware(
 )
 
 def split_and_zip_with_excel(file_bytes, df, reg_pattern, reg_col, target_col):
-    # Create temp PDF
+    # Create temporary PDF file
     temp_pdf = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
     temp_pdf.write(file_bytes)
     temp_pdf.close()
@@ -34,7 +34,7 @@ def split_and_zip_with_excel(file_bytes, df, reg_pattern, reg_col, target_col):
     # Create mapping dictionary
     mapping = dict(zip(df[reg_col].astype(str).str.strip(), df[target_col].astype(str).str.strip()))
 
-    # Output directory
+    # Create output directory
     output_dir = tempfile.mkdtemp()
     saved_files = []
 
@@ -60,14 +60,14 @@ def split_and_zip_with_excel(file_bytes, df, reg_pattern, reg_col, target_col):
             writer.write(f)
         saved_files.append(out_path)
 
-    # Create ZIP
+    # Create ZIP file
     zip_fd, zip_path = tempfile.mkstemp(suffix=".zip")
     os.close(zip_fd)
     with zipfile.ZipFile(zip_path, "w") as zf:
         for fpath in saved_files:
             zf.write(fpath, os.path.basename(fpath))
 
-    # Clean up temp files
+    # Clean up temporary files
     try:
         os.remove(temp_pdf.name)
         shutil.rmtree(output_dir)
@@ -75,7 +75,6 @@ def split_and_zip_with_excel(file_bytes, df, reg_pattern, reg_col, target_col):
         pass
 
     return zip_path
-
 
 @app.post("/split-and-rename/")
 async def split_and_rename(
@@ -95,16 +94,24 @@ async def split_and_rename(
         # Read PDF bytes
         pdf_data = await file.read()
 
-        # Read Excel directly from memory with correct engine
+        # Read Excel directly from memory with proper engine
         excel_bytes = await excel.read()
         excel_stream = BytesIO(excel_bytes)
 
-        if excel.filename.lower().endswith(".xlsx"):
+        file_ext = excel.filename.lower().split(".")[-1]
+        if file_ext == "xlsx":
             df = pd.read_excel(excel_stream, engine="openpyxl")
+        elif file_ext == "xls":
+            try:
+                df = pd.read_excel(excel_stream, engine="xlrd")
+            except ImportError:
+                return JSONResponse({
+                    "error": "Missing xlrd. Install it with: pip install xlrd>=2.0.1"
+                }, status_code=500)
         else:
-            df = pd.read_excel(excel_stream, engine="xlrd")
+            return JSONResponse({"error": "Unsupported Excel format. Only .xls and .xlsx allowed."}, status_code=400)
 
-        # Split PDF and zip
+        # Split PDF pages and zip
         zip_path = split_and_zip_with_excel(pdf_data, df, reg_pattern, reg_col, target_col)
         return FileResponse(zip_path, filename="renamed_split_pdfs.zip")
 
