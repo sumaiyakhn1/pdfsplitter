@@ -32,7 +32,10 @@ def split_and_zip_with_excel(file_bytes, df, reg_pattern, reg_col, target_col):
         raise ValueError(f"Missing columns: {missing}. Available columns: {list(df.columns)}")
 
     # Create mapping dictionary
-    mapping = dict(zip(df[reg_col].astype(str).str.strip(), df[target_col].astype(str).str.strip()))
+    mapping = dict(zip(
+        df[reg_col].astype(str).str.strip(),
+        df[target_col].astype(str).str.strip()
+    ))
 
     # Create output directory
     output_dir = tempfile.mkdtemp()
@@ -52,8 +55,13 @@ def split_and_zip_with_excel(file_bytes, df, reg_pattern, reg_col, target_col):
         else:
             reg_no = f"unknown_{i}"
 
-        # Get mapped name or fallback
+        # Get mapped target (College Roll No.)
         new_name = mapping.get(reg_no, reg_no)
+
+        # Ensure no decimal part in filename
+        if new_name.replace('.', '', 1).isdigit():
+            new_name = str(int(float(new_name)))
+
         out_path = os.path.join(output_dir, f"{new_name}.pdf")
 
         with open(out_path, "wb") as f:
@@ -75,6 +83,7 @@ def split_and_zip_with_excel(file_bytes, df, reg_pattern, reg_col, target_col):
         pass
 
     return zip_path
+
 
 @app.post("/split-and-rename/")
 async def split_and_rename(
@@ -102,12 +111,7 @@ async def split_and_rename(
         if file_ext == "xlsx":
             df = pd.read_excel(excel_stream, engine="openpyxl")
         elif file_ext == "xls":
-            try:
-                df = pd.read_excel(excel_stream, engine="xlrd")
-            except ImportError:
-                return JSONResponse({
-                    "error": "Missing xlrd. Install it with: pip install xlrd>=2.0.1"
-                }, status_code=500)
+            df = pd.read_excel(excel_stream, engine="xlrd")
         else:
             return JSONResponse({"error": "Unsupported Excel format. Only .xls and .xlsx allowed."}, status_code=400)
 
