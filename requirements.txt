@@ -2,3 +2,5 @@ fastapi
 uvicorn[standard]
 PyPDF2
 python-multipart
+pandas
+openpyxl
