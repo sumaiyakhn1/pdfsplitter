@@ -4,4 +4,4 @@ PyPDF2
 python-multipart
 pandas
 openpyxl
- 
+xlrd>=2.0.1
